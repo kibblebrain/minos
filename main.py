@@ -1,6 +1,7 @@
 import pygame
 import random
 from config import *
+from config import KEYBINDS, TIMING
 from tetromino import Tetromino, TETROMINOS
 from grid import create_grid, draw_grid, clear_lines
 
@@ -62,8 +63,8 @@ def draw_hold(hold_piece):
             screen.blit(block_img, (px, py))
 
 pygame.init()
-screen = pygame.display.set_mode((720, 720))
-pygame.display.set_caption("Tetris Engine")
+screen = pygame.display.set_mode((1280, 720))
+pygame.display.set_caption("minos")
 clock = pygame.time.Clock()
 
 block_img = pygame.image.load("assets/block.png").convert_alpha()
@@ -79,13 +80,16 @@ fall_timer = 0
 fall_interval = 0.5
 
 # DAS/ARR settings
-DAS = 0.15
-ARR = 0  # Instant repeat
+DAS = TIMING["DAS"]
+ARR = TIMING["ARR"]
+SOFT_DROP_SPEED = TIMING["SOFT_DROP_SPEED"]
+INFINITE_SOFT_DROP = TIMING["INFINITE_SOFT_DROP"]
 key_hold_timer = {"left": 0, "right": 0}
 key_held = {"left": False, "right": False}
 
 # Soft drop
 soft_drop_active = False
+soft_drop_timer = 0
 
 lock_delay = 0.5  # seconds
 lock_timer = 0
@@ -113,10 +117,25 @@ while running:
 
     # Infinite soft drop logic
     if soft_drop_active:
-        if not grounded:
-            tetromino.move(0, 1)
+        if INFINITE_SOFT_DROP:
+            while tetromino.valid_at(tetromino.x, tetromino.y + 1, tetromino.rot, grid):
+                tetromino.move(0, 1)
             fall_timer = 0
             lock_timer = 0
+            soft_drop_active = False
+        else:
+            soft_drop_timer += dt
+            if soft_drop_timer >= SOFT_DROP_SPEED:
+                if tetromino.valid_at(tetromino.x, tetromino.y + 1, tetromino.rot, grid):
+                    tetromino.move(0, 1)
+                    lock_timer = 0
+                soft_drop_timer = 0
+    else:
+        if not grounded:
+            if fall_timer >= fall_interval:
+                tetromino.move(0, 1)
+                fall_timer = 0
+                lock_timer = 0
         else:
             lock_timer += dt
             if lock_timer >= lock_delay:
@@ -125,52 +144,42 @@ while running:
                 tetromino = spawn_piece()
                 can_hold = True
                 lock_timer = 0
-    else:
-        if fall_timer >= fall_interval:
-            if not grounded:
-                tetromino.move(0, 1)
-                lock_timer = 0
-            else:
-                lock_timer += fall_timer
-                if lock_timer >= lock_delay:
-                    tetromino.lock(grid)
-                    grid, cleared = clear_lines(grid)
-                    tetromino = spawn_piece()
-                    can_hold = True
-                    lock_timer = 0
-            fall_timer = 0
-
+                fall_timer = 0  # reset fall timer after locking
+    
     # Reset lock timer on manual movement
     if grounded_last_frame and not grounded:
         lock_timer = 0
     grounded_last_frame = grounded
-
+    
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
 
         if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_LEFT:
+            if event.key == KEYBINDS["move_left"]:
                 key_held["left"] = True
                 key_hold_timer["left"] = 0
                 if tetromino.valid_at(tetromino.x - 1, tetromino.y, tetromino.rot, grid):
                     tetromino.move(-1, 0)
                     lock_timer = 0
-            elif event.key == pygame.K_RIGHT:
+            elif event.key == KEYBINDS["move_right"]:
                 key_held["right"] = True
                 key_hold_timer["right"] = 0
                 if tetromino.valid_at(tetromino.x + 1, tetromino.y, tetromino.rot, grid):
                     tetromino.move(1, 0)
                     lock_timer = 0
-            elif event.key == pygame.K_DOWN:
+            elif event.key == KEYBINDS["soft_drop"]:
                 soft_drop_active = True
-            elif event.key == pygame.K_UP:
+            elif event.key == KEYBINDS["rotate_cw"]:
                 tetromino.rotate(1, grid)
                 lock_timer = 0
-            elif event.key == pygame.K_z:
+            elif event.key == KEYBINDS["rotate_ccw"]:
                 tetromino.rotate(-1, grid)
                 lock_timer = 0
-            elif event.key == pygame.K_SPACE:
+            elif event.key == KEYBINDS["rotate_180"]:
+                tetromino.rotate(1, grid, angle=180)
+                lock_timer = 0
+            elif event.key == KEYBINDS["hard_drop"]:
                 # Hard drop
                 while tetromino.valid_at(tetromino.x, tetromino.y + 1, tetromino.rot, grid):
                     tetromino.move(0, 1)
@@ -180,7 +189,7 @@ while running:
                 can_hold = True
                 fall_timer = 0
                 lock_timer = 0
-            elif event.key == pygame.K_LSHIFT or event.key == pygame.K_RSHIFT:
+            elif event.key == KEYBINDS["hold"]:
                 if can_hold:
                     if hold_piece is None:
                         hold_piece = tetromino.type
@@ -193,11 +202,11 @@ while running:
 
 
         elif event.type == pygame.KEYUP:
-            if event.key == pygame.K_LEFT:
+            if event.key == KEYBINDS["move_left"]:
                 key_held["left"] = False
-            elif event.key == pygame.K_RIGHT:
+            elif event.key == KEYBINDS["move_right"]:
                 key_held["right"] = False
-            elif event.key == pygame.K_DOWN:
+            elif event.key == KEYBINDS["soft_drop"]:
                 soft_drop_active = False
         
 
